@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MODELO 3D DE ALMACÉN CON INSPECCIÓN IQC</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { width: 100vw; height: 100vh; overflow: hidden; background-color: #0b111e; color: #333; }
+        #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+
+        .legend-card {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            background: #ffffff;
+            padding: 18px 22px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            width: 320px;
+        }
+        .legend-card h2 { font-size: 14px; font-weight: 800; color: #1e293b; margin-bottom: 4px; }
+        .legend-card .subtitle { font-size: 11px; color: #0284c7; font-weight: 700; margin-bottom: 12px; text-transform: uppercase; }
+        .legend-list { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+        .legend-item { display: flex; align-items: center; font-size: 11px; color: #475569; font-weight: 600; cursor: pointer; padding: 3px 6px; border-radius: 4px; transition: background 0.2s; }
+        .legend-item:hover { background: #f1f5f9; }
+        .legend-color { width: 12px; height: 12px; border-radius: 3px; margin-right: 10px; flex-shrink: 0; }
+        .legend-sub { color: #94a3b8; font-weight: 400; margin-left: 3px; }
+
+        .info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+            background: rgba(15, 23, 42, 0.92);
+            backdrop-filter: blur(8px);
+            border: 1px solid #0284c7;
+            color: #f8fafc;
+            padding: 18px;
+            border-radius: 12px;
+            width: 310px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        .info-panel h3 { font-size: 14px; color: #38bdf8; margin-bottom: 6px; }
+        .info-panel p { font-size: 11px; color: #cbd5e1; line-height: 1.5; margin-bottom: 8px; }
+        .info-badge { display: inline-block; background: #0369a1; color: #e0f2fe; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; margin-bottom: 8px; }
+
+        .controls-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            background: rgba(15, 23, 42, 0.88);
+            backdrop-filter: blur(6px);
+            color: #e2e8f0;
+            padding: 8px 18px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 500;
+            display: flex;
+            gap: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+    <!-- Carga unificada de librerías en versiones estables -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <div class="legend-card">
+        <h2>MODELO 3D DE ALMACÉN (SLP)</h2>
+        <div class="subtitle">Con Área de Inspección IQC Integrada</div>
+        <ul class="legend-list">
+            <li class="legend-item" onclick="mostrarInfo('recepcion')">
+                <span class="legend-color" style="background: #3b82f6;"></span>
+                <span>Muelles de Recepción <span class="legend-sub">(Entrada)</span></span>
+            </li>
+            <li class="legend-item" onclick="mostrarInfo('iqc')">
+                <span class="legend-color" style="background: #8b5cf6;"></span>
+                <span>Inspección IQC / Calidad <span class="legend-sub">(Control de Calidad)</span></span>
+            </li>
+            <li class="legend-item" onclick="mostrarInfo('zonaA')">
+                <span class="legend-color" style="background: #ef4444;"></span>
+                <span>Racks Zona A <span class="legend-sub">(Alta Rotación)</span></span>
+            </li>
+            <li class="legend-item" onclick="mostrarInfo('zonaB')">
+                <span class="legend-color" style="background: #eab308;"></span>
+                <span>Racks Zona B <span class="legend-sub">(Media Rotación)</span></span>
+            </li>
+            <li class="legend-item" onclick="mostrarInfo('zonaC')">
+                <span class="legend-color" style="background: #94a3b8;"></span>
+                <span>Racks Zona C <span class="legend-sub">(Baja Rotación)</span></span>
+            </li>
+            <li class="legend-item" onclick="mostrarInfo('picking')">
+                <span class="legend-color" style="background: #ec4899;"></span>
+                <span>Zona Picking & Packing <span class="legend-sub">(Preparación)</span></span>
+            </li>
+            <li class="legend-item" onclick="mostrarInfo('despacho')">
+                <span class="legend-color" style="background: #10b981;"></span>
+                <span>Muelles de Despacho <span class="legend-sub">(Salida)</span></span>
+            </li>
+        </ul>
+    </div>
+
+    <div class="info-panel" id="info-panel">
+        <span class="info-badge" id="info-tag">INSPECCIÓN & CONTROL</span>
+        <h3 id="info-title">Área IQC (Incoming Quality Control)</h3>
+        <p id="info-desc">
+            Área de validación de calidad de insumos entrantes. Previene la mezcla de inventario defectuoso con el stock disponible, asegurando el cumplimiento de las normas de calidad antes del almacenamiento.
+        </p>
+    </div>
+
+    <div class="controls-hint">
+        <span>Clic Izquierdo: Rotar vista</span>
+        <span>Clic Derecho: Desplazar</span>
+        <span>Rueda: Zoom</span>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script>
+        const datosAreas = {
+            recepcion: {
+                title: "Muelles de Recepción",
+                tag: "ENTRADA DE MATERIAL",
+                desc: "Zona de descarga directa para camiones. Registra la entrada del material e invalida discrepancias antes de enviar a inspección."
+            },
+            iqc: {
+                title: "Área IQC (Incoming Quality Control)",
+                tag: "CONTROL DE CALIDAD ENTRANTE",
+                desc: "Zona de muestreo y pruebas de calidad. Valida que los materiales entregados por proveedores cumplan con las especificaciones técnicas antes de ser ubicados en los Racks."
+            },
+            zonaA: {
+                title: "Racks Zona A (Alta Rotación)",
+                tag: "CLASIFICACIÓN ABC",
+                desc: "Ubicados inmediatamente tras el alta de IQC para minimizar recorridos de productos de alta demanda."
+            },
+            zonaB: { title: "Racks Zona B", tag: "MEDIA ROTACIÓN", desc: "Almacenamiento regular de rotación media." },
+            zonaC: { title: "Racks Zona C", tag: "BAJA ROTACIÓN", desc: "Ubicados en zona profunda para maximizar espacio." },
+            picking: { title: "Picking & Packing", tag: "PREPARACIÓN", desc: "Consolidación de pedidos listos para salida." },
+            despacho: { title: "Muelles de Despacho", tag: "SALIDA FINAL", desc: "Auditoría final y embarque en vehículos de salida." }
+        };
+
+        function mostrarInfo(key) {
+            const data = datosAreas[key];
+            if (!data) return;
+            document.getElementById('info-title').textContent = data.title;
+            document.getElementById('info-tag').textContent = data.tag;
+            document.getElementById('info-desc').innerHTML = data.desc;
+        }
+
+        function initSimulation() {
+            const container = document.getElementById('canvas-container');
+            if (!container) return;
+
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0b111e);
+
+            const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(-35, 55, 75);
+
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(40, 80, 50);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            // Suelo
+            const floorGeo = new THREE.BoxGeometry(85, 1, 65);
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.position.set(0, -0.5, 0);
+            scene.add(floor);
+
+            const gridHelper = new THREE.GridHelper(85, 42, 0x38bdf8, 0x334155);
+            gridHelper.position.y = 0.02;
+            scene.add(gridHelper);
+
+            function createBlock(w, h, d, x, y, z, color, opacity = 0.85) {
+                const geo = new THREE.BoxGeometry(w, h, d);
+                const mat = new THREE.MeshStandardMaterial({ color: color, transparent: true, opacity: opacity });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(x, y + h/2, z);
+                mesh.castShadow = true;
+                scene.add(mesh);
+                return mesh;
+            }
+
+            // Bloques de Áreas
+            createBlock(14, 8, 10, -30, 0, -22, 0x2563eb); // Recepción
+            createBlock(14, 4, 10, -30, 0, -8, 0x8b5cf6);  // ZONA IQC
+            createBlock(16, 8, 12, 20, 0, -20, 0x059669);  // Despacho
+            createBlock(32, 0.5, 12, -3, 0, 18, 0xdb2777); // Picking
+
+            // Racks
+            function createRackRow(x, z, length, heightLevels, boxColor) {
+                const group = new THREE.Group();
+                const depth = 2.2;
+                const colSpacing = 2.4;
+                const frameMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8 });
+                const boxMat = new THREE.MeshStandardMaterial({ color: boxColor });
+
+                for (let i = 0; i <= length; i += colSpacing) {
+                    const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, heightLevels * 1.8, depth), frameMat);
+                    post.position.set(i - length/2, (heightLevels * 1.8)/2, 0);
+                    group.add(post);
+                }
+
+                for (let lvl = 0; lvl < heightLevels; lvl++) {
+                    const shelfY = lvl * 1.8 + 0.2;
+                    const shelf = new THREE.Mesh(new THREE.BoxGeometry(length, 0.1, depth), frameMat);
+                    shelf.position.set(0, shelfY, 0);
+                    group.add(shelf);
+
+                    for (let bx = -length/2 + 0.8; bx < length/2 - 0.5; bx += 1.1) {
+                        if (Math.random() > 0.15) {
+                            const box = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.1, 1.8), boxMat);
+                            box.position.set(bx, shelfY + 0.6, 0);
+                            group.add(box);
+                        }
+                    }
+                }
+                group.position.set(x, 0, z);
+                scene.add(group);
+            }
+
+            createRackRow(-12, -2, 18, 4, 0xdc2626); // Zona A
+            createRackRow(-7, -2, 18, 4, 0xdc2626);
+            createRackRow(3, -2, 18, 4, 0xca8a04);  // Zona B
+            createRackRow(8, -2, 18, 4, 0xca8a04);
+            createRackRow(18, -2, 18, 4, 0x64748b); // Zona C
+            createRackRow(23, -2, 18, 4, 0x64748b);
+
+            // Ruta Flujo en U con paso por IQC
+            const pointsU = [
+                new THREE.Vector3(-30, 0.1, -22), // Recepción
+                new THREE.Vector3(-30, 0.1, -8),  // Pasa por IQC
+                new THREE.Vector3(-30, 0.1, 18),  // Bajada a Picking
+                new THREE.Vector3(20, 0.1, 18),   // Conexión Horizontal
+                new THREE.Vector3(20, 0.1, -12)   // Despacho
+            ];
+
+            const curve = new THREE.CatmullRomCurve3(pointsU, false, 'catmullrom', 0.1);
+            
+            const lineGeo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(100));
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x00ff88, linewidth: 3 });
+            const lineU = new THREE.Line(lineGeo, lineMat);
+            scene.add(lineU);
+
+            // Vehículo Autónomo (AMR)
+            const amrGroup = new THREE.Group();
+            const amrBody = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.2, 1.8), new THREE.MeshStandardMaterial({ color: 0xf59e0b }));
+            amrBody.position.y = 0.6;
+            amrGroup.add(amrBody);
+            
+            const pallet = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.0, 1.5), new THREE.MeshStandardMaterial({ color: 0x00ff88 }));
+            pallet.position.set(0, 1.5, 0);
+            amrGroup.add(pallet);
+            
+            scene.add(amrGroup);
+
+            let progress = 0;
+            function animate() {
+                requestAnimationFrame(animate);
+                progress += 0.002;
+                if (progress > 1) progress = 0;
+
+                const point = curve.getPointAt(progress);
+                const tangent = curve.getTangentAt(progress);
+
+                amrGroup.position.copy(point);
+                amrGroup.lookAt(point.clone().add(tangent));
+
+                controls.update();
+                renderer.render(scene, camera);
+            }
+
+            window.addEventListener('resize', function() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            animate();
+        }
+
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            setTimeout(initSimulation, 100);
+        } else {
+            window.addEventListener('DOMContentLoaded', initSimulation);
+        }
+    </script>
+</body>
+</html>
